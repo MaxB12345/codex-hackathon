@@ -9,5 +9,8 @@
     "lint": "tsc --project tsconfig.json --noEmit",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "test": "node --test"
+  },
+  "dependencies": {
+    "@bug-agent/shared": "0.1.0"
   }
 }

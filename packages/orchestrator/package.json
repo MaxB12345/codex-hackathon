@@ -8,9 +8,11 @@
     "build": "tsc --project tsconfig.json",
     "lint": "tsc --project tsconfig.json --noEmit",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/bootstrap.test.ts"
+    "test": "node --import tsx --test src/bootstrap.test.ts src/state-machine/ticket-state-machine.test.ts"
   },
   "dependencies": {
+    "@bug-agent/audit": "0.1.0",
+    "@bug-agent/db": "0.1.0",
     "@bug-agent/shared": "0.1.0",
     "@bug-agent/skills": "0.1.0"
   }
