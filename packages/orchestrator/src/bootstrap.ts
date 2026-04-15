@@ -3,7 +3,7 @@ import { listSkillKeys } from '@bug-agent/skills';
 
 export function createBootstrapSummary(): BootstrapSummary {
   return {
-    phase: 2,
+    phase: 3,
     apps: ['web', 'api', 'worker'],
     packages: ['shared', 'config', 'db', 'skills', 'orchestrator', 'github', 'artifacts', 'execution', 'models', 'audit'],
     skills: listSkillKeys(),
@@ -13,7 +13,7 @@ export function createBootstrapSummary(): BootstrapSummary {
 
 export function bootstrapWorker() {
   return {
-    name: 'phase-two-worker',
+    name: 'phase-three-worker',
     queues: ['dedupe-ticket', 'reproduce-ticket', 'diagnose-ticket', 'run-fix-loop', 'open-pr'],
   };
 }

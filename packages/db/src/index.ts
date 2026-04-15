@@ -1,5 +1,6 @@
 export * from './schema.js';
 export * from './sqlite.js';
+export * from './repositories/bug-report-repository.js';
 export * from './repositories/ticket-repository.js';
 export * from './repositories/workspace-repository.js';
 
