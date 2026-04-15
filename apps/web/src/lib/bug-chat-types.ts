@@ -28,6 +28,23 @@ export interface BugChatResponse {
   snapshot: BugIntakeSnapshot;
 }
 
+export interface FixAgentReport {
+  executiveSummary: string;
+  fakeGithubFindings: string[];
+  probableRootCause: string;
+  proposedCodeChanges: string[];
+  samplePatch: string;
+  validationPlan: string[];
+  fakeErrorsObserved: string[];
+  pullRequestTitle: string;
+  pullRequestBody: string;
+  mergePlan: string;
+}
+
+export interface FixAgentResponse {
+  report: FixAgentReport;
+}
+
 export const EMPTY_SNAPSHOT: BugIntakeSnapshot = {
   title: 'Untitled bug report',
   description: 'Not provided yet',
@@ -53,4 +70,17 @@ export const EMPTY_SNAPSHOT: BugIntakeSnapshot = {
     'browser',
     'frequency',
   ],
+};
+
+export const EMPTY_FIX_REPORT: FixAgentReport = {
+  executiveSummary: 'Fix agent has not run yet.',
+  fakeGithubFindings: [],
+  probableRootCause: 'Not analyzed yet.',
+  proposedCodeChanges: [],
+  samplePatch: '// no patch yet',
+  validationPlan: [],
+  fakeErrorsObserved: [],
+  pullRequestTitle: 'chore: pending fix simulation',
+  pullRequestBody: 'Fix agent output will appear after intake details are captured.',
+  mergePlan: 'No merge plan yet.',
 };

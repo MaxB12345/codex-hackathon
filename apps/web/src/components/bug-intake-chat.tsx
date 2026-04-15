@@ -1,7 +1,13 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { EMPTY_SNAPSHOT, type BugChatResponse, type ChatMessage } from '../lib/bug-chat-types';
+import {
+  EMPTY_FIX_REPORT,
+  EMPTY_SNAPSHOT,
+  type BugChatResponse,
+  type ChatMessage,
+  type FixAgentResponse,
+} from '../lib/bug-chat-types';
 
 function createInitialConversation(): ChatMessage[] {
   return [
@@ -25,19 +31,22 @@ function createMessage(role: ChatMessage['role'], message: string): ChatMessage 
 export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>(() => createInitialConversation());
   const [snapshot, setSnapshot] = useState(EMPTY_SNAPSHOT);
+  const [fixReport, setFixReport] = useState(EMPTY_FIX_REPORT);
   const [draft, setDraft] = useState('');
   const [typing, setTyping] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = draft.trim();
-    if (!trimmed || typing) {
+    if (!trimmed || typing || fixing) {
       return;
     }
 
     setError(null);
-    const nextMessages = [...messages, createMessage('user', trimmed)];
+    const userMessage = createMessage('user', trimmed);
+    const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setDraft('');
     setTyping(true);
@@ -51,12 +60,36 @@ export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: strin
 
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
-        throw new Error(payload.error ?? 'Failed to generate agent response.');
+        throw new Error(payload.error ?? 'Failed to generate intake response.');
       }
 
-      const payload = (await response.json()) as BugChatResponse;
-      setMessages((prev) => [...prev, createMessage('agent', payload.reply)]);
-      setSnapshot(payload.snapshot);
+      const intake = (await response.json()) as BugChatResponse;
+      const withAgent = [...nextMessages, createMessage('agent', intake.reply)];
+      setMessages(withAgent);
+      setSnapshot(intake.snapshot);
+      setTyping(false);
+      setFixing(true);
+
+      const fixResponse = await fetch('/agent-api/fix-agent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages: withAgent, snapshot: intake.snapshot }),
+      });
+
+      if (!fixResponse.ok) {
+        const payload = (await fixResponse.json()) as { error?: string };
+        throw new Error(payload.error ?? 'Failed to generate fix-agent output.');
+      }
+
+      const fixPayload = (await fixResponse.json()) as FixAgentResponse;
+      setFixReport(fixPayload.report);
+      setMessages((prev) => [
+        ...prev,
+        createMessage(
+          'agent',
+          `Fix agent simulation complete. Draft PR prepared: ${fixPayload.report.pullRequestTitle}`,
+        ),
+      ]);
     } catch (requestError) {
       const message =
         requestError instanceof Error ? requestError.message : 'Unable to reach agent API. Check server logs.';
@@ -70,6 +103,7 @@ export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: strin
       ]);
     } finally {
       setTyping(false);
+      setFixing(false);
     }
   }
 
@@ -77,9 +111,12 @@ export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: strin
     <main className="chat-shell">
       <section className="chat-panel">
         <header className="chat-header">
-          <p className="eyebrow">Live Agent</p>
+          <p className="eyebrow">Two-Agent Prototype</p>
           <h1>{heading}</h1>
-          <p>Chat with the intake agent to capture complete bug details for developers.</p>
+          <p>
+            Intake agent captures bug details, then a second synthetic fix agent fabricates diagnosis, code edits,
+            and PR output.
+          </p>
         </header>
 
         <div className="chat-log" aria-live="polite">
@@ -91,8 +128,14 @@ export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: strin
           ))}
           {typing ? (
             <article className="bubble agent">
-              <p className="bubble-role">Agent</p>
-              <p>Thinking...</p>
+              <p className="bubble-role">Intake Agent</p>
+              <p>Collecting structured details...</p>
+            </article>
+          ) : null}
+          {fixing ? (
+            <article className="bubble agent">
+              <p className="bubble-role">Fix Agent</p>
+              <p>Fabricating GitHub findings, code diff, and PR summary...</p>
             </article>
           ) : null}
         </div>
@@ -108,7 +151,7 @@ export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: strin
             rows={3}
             placeholder="Example: Save button does nothing on mobile checkout page..."
           />
-          <button type="submit" disabled={typing || draft.trim().length < 4}>
+          <button type="submit" disabled={typing || fixing || draft.trim().length < 4}>
             Send
           </button>
           {error ? <p className="error-text">{error}</p> : null}
@@ -117,7 +160,7 @@ export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: strin
 
       <aside className="summary-panel">
         <h2>Structured Intake</h2>
-        <p className="summary-note">Extracted by the live agent from your conversation.</p>
+        <p className="summary-note">Extracted by the intake agent from your conversation.</p>
         <dl>
           <div>
             <dt>Title</dt>
@@ -164,6 +207,53 @@ export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: strin
           <div>
             <dt>Missing Fields</dt>
             <dd>{snapshot.missingFields.length > 0 ? snapshot.missingFields.join(', ') : 'None'}</dd>
+          </div>
+        </dl>
+
+        <h2 className="fix-title">Fix Agent (Synthetic)</h2>
+        <p className="summary-note">Everything below is intentionally fabricated for demo purposes.</p>
+        <dl>
+          <div>
+            <dt>Executive Summary</dt>
+            <dd>{fixReport.executiveSummary}</dd>
+          </div>
+          <div>
+            <dt>Fake Errors From GitHub</dt>
+            <dd>{fixReport.fakeErrorsObserved.length > 0 ? fixReport.fakeErrorsObserved.join(' | ') : 'Pending'}</dd>
+          </div>
+          <div>
+            <dt>Fake GitHub Findings</dt>
+            <dd>{fixReport.fakeGithubFindings.length > 0 ? fixReport.fakeGithubFindings.join(' | ') : 'Pending'}</dd>
+          </div>
+          <div>
+            <dt>Probable Root Cause</dt>
+            <dd>{fixReport.probableRootCause}</dd>
+          </div>
+          <div>
+            <dt>Proposed Code Changes</dt>
+            <dd>{fixReport.proposedCodeChanges.length > 0 ? fixReport.proposedCodeChanges.join(' | ') : 'Pending'}</dd>
+          </div>
+          <div>
+            <dt>Sample Patch</dt>
+            <dd>
+              <pre className="code-block">{fixReport.samplePatch}</pre>
+            </dd>
+          </div>
+          <div>
+            <dt>Validation Plan</dt>
+            <dd>{fixReport.validationPlan.length > 0 ? fixReport.validationPlan.join(' | ') : 'Pending'}</dd>
+          </div>
+          <div>
+            <dt>PR Title</dt>
+            <dd>{fixReport.pullRequestTitle}</dd>
+          </div>
+          <div>
+            <dt>PR Body</dt>
+            <dd>{fixReport.pullRequestBody}</dd>
+          </div>
+          <div>
+            <dt>Merge Plan</dt>
+            <dd>{fixReport.mergePlan}</dd>
           </div>
         </dl>
       </aside>

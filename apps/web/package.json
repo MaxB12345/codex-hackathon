@@ -8,7 +8,7 @@
     "start": "next start -p ${WEB_PORT:-3000}",
     "lint": "next lint",
     "typecheck": "tsc --project tsconfig.typecheck.json --noEmit",
-    "test": "node --import tsx --test src/lib/bug-chat-response.test.ts"
+    "test": "node --import tsx --test src/lib/bug-chat-response.test.ts src/lib/bug-fix-response.test.ts"
   },
   "dependencies": {
     "next": "15.3.1",
