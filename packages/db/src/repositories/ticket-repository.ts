@@ -1,10 +1,22 @@
 import type Database from 'better-sqlite3';
 import type { TicketRecord, TicketStateTransition } from '@bug-agent/shared';
 
+const TERMINAL_STATES: TicketRecord['status'][] = [
+  'UNVERIFIED_CLOSED',
+  'FIX_FAILED_STAGNATION',
+  'FIX_FAILED_LOW_CONFIDENCE',
+  'FIX_BLOCKED_ENVIRONMENT',
+  'FIX_FAILED_COMPLEXITY',
+  'MERGED',
+  'REJECTED',
+  'MANUAL_REVIEW_REQUIRED',
+];
+
 export interface TicketRepository {
   create(ticket: TicketRecord): Promise<TicketRecord>;
   getById(id: string): Promise<TicketRecord | null>;
   update(ticket: TicketRecord): Promise<TicketRecord>;
+  listOpenByWorkspace(workspaceId: string, excludeTicketId?: string): Promise<TicketRecord[]>;
   listTransitions(ticketId: string): Promise<TicketStateTransition[]>;
   appendTransition(transition: TicketStateTransition): Promise<TicketStateTransition>;
 }
@@ -25,6 +37,15 @@ export class InMemoryTicketRepository implements TicketRepository {
   async update(ticket: TicketRecord): Promise<TicketRecord> {
     this.tickets.set(ticket.id, ticket);
     return ticket;
+  }
+
+  async listOpenByWorkspace(workspaceId: string, excludeTicketId?: string): Promise<TicketRecord[]> {
+    return [...this.tickets.values()].filter(
+      (ticket) =>
+        ticket.workspaceId === workspaceId &&
+        ticket.id !== excludeTicketId &&
+        !TERMINAL_STATES.includes(ticket.status),
+    );
   }
 
   async listTransitions(ticketId: string): Promise<TicketStateTransition[]> {
@@ -120,6 +141,43 @@ export class SqliteTicketRepository implements TicketRepository {
         ticket.id,
       );
     return ticket;
+  }
+
+  async listOpenByWorkspace(workspaceId: string, excludeTicketId?: string): Promise<TicketRecord[]> {
+    const rows = this.db
+      .prepare(
+        `select id, workspace_id, title, summary, status, severity, priority_score, report_count, created_at, updated_at
+         from tickets
+         where workspace_id = ?
+           and status not in (${TERMINAL_STATES.map(() => '?').join(', ')})
+           and (? is null or id != ?)
+         order by updated_at desc`,
+      )
+      .all(workspaceId, ...TERMINAL_STATES, excludeTicketId ?? null, excludeTicketId ?? null) as {
+      id: string;
+      workspace_id: string;
+      title: string;
+      summary: string;
+      status: TicketRecord['status'];
+      severity: number;
+      priority_score: number;
+      report_count: number;
+      created_at: string;
+      updated_at: string;
+    }[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      workspaceId: row.workspace_id,
+      title: row.title,
+      summary: row.summary,
+      status: row.status,
+      severity: row.severity as 1 | 2 | 3 | 4,
+      priorityScore: row.priority_score,
+      reportCount: row.report_count,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
   }
 
   async listTransitions(ticketId: string): Promise<TicketStateTransition[]> {

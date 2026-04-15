@@ -8,7 +8,7 @@
     "build": "tsc --project tsconfig.json",
     "lint": "tsc --project tsconfig.json --noEmit",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "test": "node --import tsx --test src/core/calculate-priority.test.ts"
+    "test": "node --import tsx --test src/core/calculate-priority.test.ts src/core/dedupe.test.ts"
   },
   "dependencies": {
     "@bug-agent/shared": "0.1.0"

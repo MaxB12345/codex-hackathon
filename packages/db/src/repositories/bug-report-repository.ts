@@ -167,6 +167,7 @@ export class SqliteBugReportRepository implements BugReportRepository {
   }
 
   async linkReportToTicket(ticketId: string, bugReportId: string): Promise<void> {
+    this.db.prepare('delete from ticket_reports where bug_report_id = ?').run(bugReportId);
     this.db
       .prepare('insert into ticket_reports (ticket_id, bug_report_id, created_at) values (?, ?, CURRENT_TIMESTAMP)')
       .run(ticketId, bugReportId);
