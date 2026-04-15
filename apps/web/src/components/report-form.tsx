@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { FormEvent, useMemo, useState } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:4000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 async function fileToBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
@@ -26,6 +26,7 @@ export function ReportForm() {
   const [error, setError] = useState<string | null>(null);
 
   const submitDisabled = useMemo(() => submitting || description.trim().length < 8, [description, submitting]);
+  const requestUrl = (pathname: string) => `${API_BASE}${pathname}`;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,7 +34,7 @@ export function ReportForm() {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/bug-reports`, {
+      const response = await fetch(requestUrl('/api/bug-reports'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -57,7 +58,7 @@ export function ReportForm() {
       if (files && files.length > 0) {
         for (const file of Array.from(files)) {
           const contentBase64 = await fileToBase64(file);
-          await fetch(`${API_BASE}/api/bug-reports/${created.bugReportId}/attachments`, {
+          await fetch(requestUrl(`/api/bug-reports/${created.bugReportId}/attachments`), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
@@ -71,7 +72,16 @@ export function ReportForm() {
 
       router.push(`/report/${created.bugReportId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit report');
+      if (err instanceof Error) {
+        const normalized = err.message.toLowerCase();
+        if (normalized.includes('load failed') || normalized.includes('failed to fetch')) {
+          setError('Load failed. Ensure both web and api servers are running (`npm run dev`).');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('Failed to submit report');
+      }
     } finally {
       setSubmitting(false);
     }
