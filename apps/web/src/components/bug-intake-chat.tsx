@@ -43,7 +43,7 @@ export function BugIntakeChat({ heading = 'Bug Intake Chat' }: { heading?: strin
     setTyping(true);
 
     try {
-      const response = await fetch('/api/bug-chat', {
+      const response = await fetch('/agent-api/bug-chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ messages: nextMessages }),

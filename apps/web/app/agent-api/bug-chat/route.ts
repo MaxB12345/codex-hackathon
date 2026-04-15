@@ -1,14 +1,13 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 import { BUG_REPORT_SKILL } from '../../../src/lib/bug-report-skill';
+import { readServerEnv } from '../../../src/lib/server-env';
 import type { ChatMessage } from '../../../src/lib/bug-chat-types';
 import { normalizeBugChatResponse, tryParseJson } from '../../../src/lib/bug-chat-response';
 
 interface ChatRequestBody {
   messages: ChatMessage[];
 }
-
-const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4.1-mini';
 
 const SYSTEM_PROMPT = [
   'You are a bug intake agent for a web application.',
@@ -34,11 +33,19 @@ function toOpenAIInput(messages: ChatMessage[]) {
 }
 
 export async function POST(request: Request) {
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: 'Missing OPENAI_API_KEY in environment.' }, { status: 500 });
+  const apiKey = readServerEnv('OPENAI_API_KEY');
+  if (!apiKey) {
+    return NextResponse.json(
+      {
+        error:
+          'Missing OPENAI_API_KEY. Set it in apps/web/.env.local or root .env, then restart the web server.',
+      },
+      { status: 500 },
+    );
   }
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const model = readServerEnv('OPENAI_MODEL') ?? 'gpt-4.1-mini';
+  const client = new OpenAI({ apiKey });
 
   let body: ChatRequestBody;
   try {
@@ -54,7 +61,7 @@ export async function POST(request: Request) {
 
   try {
     const response = await client.responses.create({
-      model: MODEL,
+      model,
       input: toOpenAIInput(messages),
       temperature: 0.2,
     });
