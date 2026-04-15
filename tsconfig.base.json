@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@bug-agent/shared/*": ["packages/shared/src/*"],
+      "@bug-agent/config/*": ["packages/config/src/*"],
+      "@bug-agent/db/*": ["packages/db/src/*"],
+      "@bug-agent/skills/*": ["packages/skills/src/*"],
+      "@bug-agent/orchestrator/*": ["packages/orchestrator/src/*"],
+      "@bug-agent/github/*": ["packages/github/src/*"],
+      "@bug-agent/execution/*": ["packages/execution/src/*"],
+      "@bug-agent/artifacts/*": ["packages/artifacts/src/*"],
+      "@bug-agent/models/*": ["packages/models/src/*"],
+      "@bug-agent/audit/*": ["packages/audit/src/*"]
+    }
+  }
+}

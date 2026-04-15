@@ -1,0 +1,16 @@
+{
+  "name": "@bug-agent/skills",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "lint": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/core/calculate-priority.test.ts"
+  },
+  "dependencies": {
+    "@bug-agent/shared": "0.1.0"
+  }
+}

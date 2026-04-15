@@ -1,0 +1,21 @@
+{
+  "name": "@bug-agent/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --project tsconfig.json",
+    "lint": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/server.test.ts"
+  },
+  "dependencies": {
+    "@bug-agent/audit": "0.1.0",
+    "@bug-agent/config": "0.1.0",
+    "@bug-agent/db": "0.1.0",
+    "@bug-agent/github": "0.1.0",
+    "@bug-agent/orchestrator": "0.1.0",
+    "@bug-agent/shared": "0.1.0"
+  }
+}

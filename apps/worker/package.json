@@ -1,0 +1,17 @@
+{
+  "name": "@bug-agent/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --project tsconfig.json",
+    "lint": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@bug-agent/orchestrator": "0.1.0",
+    "@bug-agent/shared": "0.1.0"
+  }
+}
