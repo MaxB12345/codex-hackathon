@@ -6,6 +6,7 @@ import { AuditLogService, SqliteAuditLogRepository } from '@bug-agent/audit';
 import { loadConfig } from '@bug-agent/config';
 import { SqliteBugReportRepository, SqliteTicketRepository, SqliteWorkspaceRepository, getSqliteDatabase } from '@bug-agent/db';
 import { createBootstrapSummary, TicketStateMachine } from '@bug-agent/orchestrator';
+import { computePriorityScore, findDuplicateTicket } from '@bug-agent/skills';
 import type { TicketRecord } from '@bug-agent/shared';
 
 interface CreateBugReportBody {
@@ -41,6 +42,11 @@ interface IntakeStructured {
   environment: Record<string, unknown>;
   chat: { role: 'user' | 'agent'; message: string; createdAt: string }[];
   attachments: { id: string; fileType: string; storageUrl: string }[];
+  dedupe?: {
+    duplicateOfTicketId: string | null;
+    confidenceScore: number;
+    rationale: string;
+  };
   completenessScore: number;
 }
 
@@ -166,6 +172,11 @@ function toIntakeStructured(value: unknown): IntakeStructured {
       environment: {},
       chat: [],
       attachments: [],
+      dedupe: {
+        duplicateOfTicketId: null,
+        confidenceScore: 0,
+        rationale: '',
+      },
       completenessScore: 0,
     };
   }
@@ -196,6 +207,19 @@ function toIntakeStructured(value: unknown): IntakeStructured {
           typeof entry.storageUrl === 'string',
       )
     : [];
+  const dedupe = isObject(value.dedupe)
+    ? {
+        duplicateOfTicketId:
+          typeof value.dedupe.duplicateOfTicketId === 'string' ? value.dedupe.duplicateOfTicketId : null,
+        confidenceScore:
+          typeof value.dedupe.confidenceScore === 'number' ? value.dedupe.confidenceScore : 0,
+        rationale: typeof value.dedupe.rationale === 'string' ? value.dedupe.rationale : '',
+      }
+    : {
+        duplicateOfTicketId: null,
+        confidenceScore: 0,
+        rationale: '',
+      };
 
   const structured: IntakeStructured = {
     title,
@@ -206,6 +230,7 @@ function toIntakeStructured(value: unknown): IntakeStructured {
     environment,
     chat,
     attachments,
+    dedupe,
     completenessScore: 0,
   };
   structured.completenessScore = evaluateCompleteness(structured);
@@ -225,6 +250,113 @@ function buildTicketFromStructured(ticketId: string, workspaceId: string, struct
     reportCount: 1,
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+interface FinalizeStructuredResult {
+  ticketId: string;
+  ticketStatus: TicketRecord['status'];
+  duplicateOfTicketId: string | null;
+  dedupeConfidence: number;
+  dedupeRationale: string;
+}
+
+async function finalizeStructuredReport(
+  bugReportId: string,
+  initialTicketId: string,
+  structured: IntakeStructured,
+): Promise<FinalizeStructuredResult> {
+  let ticket = await ticketRepository.getById(initialTicketId);
+  if (!ticket) {
+    throw new Error('linked ticket not found');
+  }
+
+  if (ticket.status === 'NEW_REPORT') {
+    ticket = await ticketStateMachine.transition({
+      ticketId: ticket.id,
+      to: 'STRUCTURED',
+      actorType: 'api',
+      reasonCode: 'intake.completed',
+      summary: 'Structured intake completed and dedupe evaluation started.',
+    });
+  }
+
+  const candidates = await ticketRepository.listOpenByWorkspace(ticket.workspaceId, ticket.id);
+  const dedupe = findDuplicateTicket({
+    sourceTitle: structured.title,
+    sourceSummary: structured.summary,
+    sourceReproSteps: structured.reproSteps,
+    candidateTickets: candidates.map((candidate) => ({
+      id: candidate.id,
+      title: candidate.title,
+      summary: candidate.summary,
+    })),
+  });
+
+  structured.dedupe = {
+    duplicateOfTicketId: dedupe.duplicateOfTicketId,
+    confidenceScore: dedupe.confidenceScore,
+    rationale: dedupe.rationale,
+  };
+  await bugReportRepository.updateStructuredJson(bugReportId, structured);
+
+  if (ticket.status === 'STRUCTURED') {
+    ticket = await ticketStateMachine.transition({
+      ticketId: ticket.id,
+      to: 'DEDUPED',
+      actorType: 'api',
+      reasonCode: dedupe.duplicateOfTicketId ? 'dedupe.duplicate_found' : 'dedupe.no_match',
+      summary: dedupe.duplicateOfTicketId
+        ? `Bug report merged into canonical ticket ${dedupe.duplicateOfTicketId}.`
+        : 'No duplicate match found for structured ticket.',
+    });
+  }
+
+  if (dedupe.duplicateOfTicketId) {
+    const canonical = await ticketRepository.getById(dedupe.duplicateOfTicketId);
+    if (!canonical) {
+      throw new Error('canonical duplicate ticket not found');
+    }
+
+    await bugReportRepository.linkReportToTicket(canonical.id, bugReportId);
+    const updatedCanonical: TicketRecord = {
+      ...canonical,
+      reportCount: canonical.reportCount + 1,
+      priorityScore: await computePriorityScore({
+        severity: canonical.severity,
+        reportCount: canonical.reportCount + 1,
+        createdAtIso: canonical.createdAt,
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    await ticketRepository.update(updatedCanonical);
+
+    return {
+      ticketId: canonical.id,
+      ticketStatus: ticket.status,
+      duplicateOfTicketId: canonical.id,
+      dedupeConfidence: dedupe.confidenceScore,
+      dedupeRationale: dedupe.rationale,
+    };
+  }
+
+  const reprioritized: TicketRecord = {
+    ...ticket,
+    priorityScore: await computePriorityScore({
+      severity: ticket.severity,
+      reportCount: ticket.reportCount,
+      createdAtIso: ticket.createdAt,
+    }),
+    updatedAt: new Date().toISOString(),
+  };
+  await ticketRepository.update(reprioritized);
+
+  return {
+    ticketId: reprioritized.id,
+    ticketStatus: reprioritized.status,
+    duplicateOfTicketId: null,
+    dedupeConfidence: dedupe.confidenceScore,
+    dedupeRationale: dedupe.rationale,
   };
 }
 
@@ -285,25 +417,30 @@ export function createApiServer() {
         await bugReportRepository.linkReportToTicket(ticketId, bugReportId);
 
         let status = ticket.status;
+        let responseTicketId = ticketId;
+        let duplicateOfTicketId: string | null = null;
+        let dedupeConfidence = 0;
+        let dedupeRationale = '';
         const followUpQuestion = nextFollowUpQuestion(structured);
         if (!followUpQuestion) {
-          const updated = await ticketStateMachine.transition({
-            ticketId,
-            to: 'STRUCTURED',
-            actorType: 'api',
-            reasonCode: 'intake.completed',
-            summary: 'Structured intake was complete at initial report submission.',
-          });
-          status = updated.status;
+          const finalized = await finalizeStructuredReport(bugReportId, ticketId, structured);
+          status = finalized.ticketStatus;
+          responseTicketId = finalized.ticketId;
+          duplicateOfTicketId = finalized.duplicateOfTicketId;
+          dedupeConfidence = finalized.dedupeConfidence;
+          dedupeRationale = finalized.dedupeRationale;
         }
 
         jsonResponse(res, 201, {
           bugReportId,
-          ticketId,
+          ticketId: responseTicketId,
           status,
           nextAction: followUpQuestion ? 'awaiting_followup' : 'structured',
           followUpQuestion,
           completenessScore: structured.completenessScore,
+          duplicateOfTicketId,
+          dedupeConfidence,
+          dedupeRationale,
         });
         return;
       }
@@ -385,26 +522,31 @@ export function createApiServer() {
 
         const followUpQuestion = nextFollowUpQuestion(structured);
         let status = ticket.status;
+        let responseTicketId = ticket.id;
+        let duplicateOfTicketId: string | null = null;
+        let dedupeConfidence = 0;
+        let dedupeRationale = '';
 
         if (!followUpQuestion && ticket.status === 'NEW_REPORT') {
-          const updated = await ticketStateMachine.transition({
-            ticketId,
-            to: 'STRUCTURED',
-            actorType: 'api',
-            reasonCode: 'intake.completed',
-            summary: 'Structured intake completed after follow-up responses.',
-          });
-          status = updated.status;
+          const finalized = await finalizeStructuredReport(bugReportId, ticketId, structured);
+          status = finalized.ticketStatus;
+          responseTicketId = finalized.ticketId;
+          duplicateOfTicketId = finalized.duplicateOfTicketId;
+          dedupeConfidence = finalized.dedupeConfidence;
+          dedupeRationale = finalized.dedupeRationale;
         }
 
         jsonResponse(res, 200, {
           bugReportId,
-          ticketId,
+          ticketId: responseTicketId,
           status,
-          structured: status === 'STRUCTURED',
+          structured: status === 'DEDUPED' || status === 'STRUCTURED',
           followUpQuestion,
           completenessScore: structured.completenessScore,
           nextAction: followUpQuestion ? 'awaiting_followup' : 'structured',
+          duplicateOfTicketId,
+          dedupeConfidence,
+          dedupeRationale,
         });
         return;
       }
