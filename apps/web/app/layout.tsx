@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'AI Bug Resolution Agent',
-  description: 'Local-first MVP scaffold for bug intake and autonomous fix workflows.',
+  title: 'Bug Reporter Chat Prototype',
+  description: 'Chatbot-style bug intake prototype with mocked agent follow-up responses.',
 };
 
 export default function RootLayout({

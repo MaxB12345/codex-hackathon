@@ -8,10 +8,11 @@
     "start": "next start -p ${WEB_PORT:-3000}",
     "lint": "next lint",
     "typecheck": "tsc --project tsconfig.typecheck.json --noEmit",
-    "test": "node -e \"console.log('No web tests configured yet')\""
+    "test": "node --import tsx --test src/lib/bug-chat-response.test.ts"
   },
   "dependencies": {
     "next": "15.3.1",
+    "openai": "^6.0.0",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
