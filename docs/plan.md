@@ -107,8 +107,6 @@ The system should escalate instead of looping indefinitely.
 /docs
   prd.md               product requirements
   plan.md              implementation plan and system map
-/docker
-  docker-compose.dev.yml
 /AGENTS.md             engineering rules and safety constraints
 /README.md             local setup and usage
 ```
@@ -139,17 +137,12 @@ Purpose:
 - consume queue messages
 - perform reproduction, diagnosis, fix loop, and PR workflows
 
-### 6.4 Postgres
+### 6.4 SQLite
 Purpose:
-- persistent system of record
-- ticket, report, run, PR, and audit data
+- persistent local system of record
+- stores ticket, report, run, PR, and audit data
 
-### 6.5 Redis
-Purpose:
-- queue backend
-- job state and retry control
-
-### 6.6 Local Artifact Storage
+### 6.5 Local Artifact Storage
 Purpose:
 - save screenshots
 - save logs
@@ -881,7 +874,6 @@ Responsibilities:
 ### 17.1 Prerequisites
 - Node.js 20+
 - npm 10+
-- Docker
 - OpenAI API key for model-backed skills later
 
 ### 17.2 Local Environment Variables
@@ -891,8 +883,7 @@ NODE_ENV=development
 PORT=4000
 WEB_PORT=3000
 WORKER_PORT=4500
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/bug_agent
-REDIS_URL=redis://localhost:6379
+SQLITE_PATH=./.local/data/bug_agent.sqlite
 ARTIFACTS_ROOT=./.local/artifacts
 OPENAI_API_KEY=
 GITHUB_PROVIDER_MODE=local
@@ -905,7 +896,6 @@ GITHUB_CLIENT_SECRET=
 
 ### 17.3 Local Startup
 ```bash
-docker compose -f docker/docker-compose.dev.yml up -d
 npm install
 npm run db:migrate
 npm run dev
@@ -914,7 +904,7 @@ npm run dev
 ### 17.4 Local Execution Philosophy
 For MVP development:
 - keep artifacts on local disk
-- keep queue local via Redis container
+- keep worker execution local in-process
 - keep repo operations abstracted
 - stub external providers until each phase needs them
 - prioritize deterministic local debugging
