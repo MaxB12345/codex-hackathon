@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:4000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
 
 interface ReportStatus {
   bugReportId: string;
@@ -24,12 +24,13 @@ export function ReportFollowUp({ bugReportId }: { bugReportId: string }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestUrl = (pathname: string) => `${API_BASE}${pathname}`;
 
   async function refresh() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/bug-reports/${bugReportId}/status`);
+      const response = await fetch(requestUrl(`/api/bug-reports/${bugReportId}/status`));
       if (!response.ok) {
         throw new Error('Unable to load report status');
       }
@@ -52,7 +53,7 @@ export function ReportFollowUp({ bugReportId }: { bugReportId: string }) {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/bug-reports/${bugReportId}/messages`, {
+      const response = await fetch(requestUrl(`/api/bug-reports/${bugReportId}/messages`), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
